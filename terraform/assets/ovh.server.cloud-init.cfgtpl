@@ -1,0 +1,37 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+ssh_pwauth: true
+disable_root: true
+chpasswd:
+    expire: false
+    # configure root user
+    list: |
+        ${root_user}:${root_password}
+
+packages:
+  # install docker packages
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+
+users:
+  - default
+  - name: bitfis
+    groups: docker
+    shell: /bin/bash
+    sudo:  ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHA4QPk8WN6hEHpootzw/+0JJt4675vbP1lfqhAYmfAC lucien@zuercher.io
+
+yum_repos:
+  docker-ce:
+    name: Docker CE Stable - $basearch
+    baseurl: https://download.docker.com/linux/fedora/$releasever/$basearch/stable
+    gpgcheck: true
+    gpgkey: https://download.docker.com/linux/fedora/gpg
+
+runcmd:
+  - sudo systemctl start docker
