@@ -7,3 +7,5 @@ provider "ovh" {
   application_secret = var.OVH_APPLICATION_SECRET
   consumer_key       = var.OVH_CONSUMER_KEY
 }
+
+provider "tls" {}

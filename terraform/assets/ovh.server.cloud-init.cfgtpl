@@ -19,6 +19,12 @@ packages:
 
 users:
   - default
+  - name: terraform
+    groups: docker
+    shell: /bin/bash
+    sudo:  ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${terraform_pem}
   - name: bitfis
     groups: docker
     shell: /bin/bash
