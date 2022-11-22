@@ -45,6 +45,20 @@ resource "null_resource" "coreserver" {
         "sudo cloud-init -f /tmp/cloud-init.yaml -d modules --mode=final"
     ]
   }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo systemctl disable ufw",
+      "sudo ufw disable",
+      "echo 'y' | sudo ufw reset",
+      "sudo ufw default allow outgoing",
+      "sudo ufw default deny incoming",
+      "sudo ufw allow ssh",
+      "sudo ufw allow 80/tcp",
+      "echo 'y' | sudo ufw enable",
+      "sudo systemctl enable ufw"
+    ]
+  }
 }
 
 output "terraform_keys" {

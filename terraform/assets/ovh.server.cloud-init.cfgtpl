@@ -16,6 +16,7 @@ packages:
   - docker-ce-cli
   - containerd.io
   - docker-compose-plugin
+  - ufw
 
 users:
   - default
