@@ -18,6 +18,12 @@ Check the [offical documentation for other systems](https://developer.hashicorp.
 
 Configure the credentials.yml from credentials.yml.example file and .env from .env.example file.
 
+```bash
+terraform apply
+cd docker
+terraform apply
+```
+
 ## Development
 
 Test cloud init config files:
@@ -26,3 +32,7 @@ Test cloud init config files:
 cloud-init --file cloud-init.yaml single --name runcmd --frequency=always
 cloud-init --file cloud-init.yaml single --name scripts_user --frequency=always
 ```
+
+## TODO
+
+- [ ] Setup fail2ban

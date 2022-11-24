@@ -15,7 +15,7 @@ resource "cloudflare_record" "www" {
 resource "cloudflare_record" "main" {
   zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
   value   = data.ovh_vps.coreserver.service_name
-  name =    "@"
+  name    = "@"
   type    = "CNAME"
   proxied = true
 }

@@ -15,10 +15,10 @@ variable "OVH_CONSUMER_KEY" {
 
 variable "CLOUDFLATE_API_TOKEN" {
   description = "Cloudflare access token"
-  sensitive = true
+  sensitive   = true
 }
 
 variable "CLOUDFLARE_ZUERCHER_DEV_ZONE_ID" {
   description = "Cloudflare zone id for zuercher.dev"
-  sensitive = true
+  sensitive   = true
 }

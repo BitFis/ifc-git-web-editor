@@ -1,6 +1,8 @@
 # ignore local env file
 .env
 credentials.yml
+# ignore ssh access key
+.ssh_access_key
 
 # Local .terraform directories
 **/.terraform/*
