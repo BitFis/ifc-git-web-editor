@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/random"
       version = "3.4.3"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -21,21 +25,44 @@ data "terraform_remote_state" "docker_server" {
   }
 }
 
-variable "CLOUDFLARE_CORE_API_KEY" {
-  sensitive = true
-}
-
-variable "CLOUDFLARE_CORE_EMAIL" {
-  sensitive = true
-}
-
 locals {
   docker_config = data.terraform_remote_state.docker_server.outputs.docker_config
+  coreserver = {
+    host = data.terraform_remote_state.docker_server.outputs.coreserver_host
+  }
 }
 
 provider "docker" {
   host     = local.docker_config.host
   ssh_opts = local.docker_config.ssh_opts
+}
+
+provider "cloudflare" {
+  api_token = var.CLOUDFLATE_API_TOKEN
+}
+
+resource "cloudflare_record" "traefik" {
+  zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
+  name    = "traefik"
+  value   = local.coreserver.host
+  type    = "CNAME"
+  proxied = true
+}
+
+resource "cloudflare_record" "login" {
+  zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
+  name    = "login"
+  value   = local.coreserver.host
+  type    = "CNAME"
+  proxied = true
+}
+
+resource "cloudflare_record" "ifc" {
+  zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
+  name    = "ifc"
+  value   = local.coreserver.host
+  type    = "CNAME"
+  proxied = true
 }
 
 resource "docker_image" "nginx" {
@@ -46,32 +73,102 @@ resource "docker_image" "traefik" {
   name = "traefik:2.8"
 }
 
-resource "docker_image" "keycloak" {
-  name = "quay.io/keycloak/keycloak:20.0.1"
-}
-
-resource "random_password" "keycloak" {
-  length           = 16
-  special          = true
-  override_special = "_%@"
-}
-
 resource "docker_container" "whoami" {
   image = "containous/whoami"
 
   name = "simple-service"
 
-  labels {
-    label = "traefik.http.routers.whoami.rule"
-    value = "Host(`test.zuercher.dev`)"
+  dynamic "labels" {
+    for_each = {
+      "traefik.http.routers.whoami.rule"                      = "Host(`test.zuercher.dev`)"
+      "traefik.http.routers.whoami.tls"                       = true
+      "traefik.http.routers.whoami.tls.certresolver"          = "le"
+      "traefik.http.services.whoami.loadbalancer.server.port" = 80
+    }
+    content {
+      label = labels.key
+      value = labels.value
+    }
   }
-  labels {
-    label = "traefik.http.routers.whoami.tls"
-    value = "true"
+
+  networks_advanced {
+    name = docker_network.traefik.id
   }
-  labels {
-    label = "traefik.http.routers.whoami.tls.certresolver"
-    value = "le"
+}
+
+resource "docker_container" "ifceditor" {
+  image = "containous/whoami"
+
+  name = "ifceditor"
+
+  dynamic "labels" {
+    for_each = {
+      "traefik.http.routers.ifceditor.rule"                      = "Host(`ifc.zuercher.dev`)"
+      "traefik.http.routers.ifceditor.tls"                       = true
+      "traefik.http.routers.ifceditor.tls.certresolver"          = "le"
+      "traefik.http.services.ifceditor.loadbalancer.server.port" = 80
+      "traefik.http.routers.ifceditor.middlewares"               = "traefik-forward-auth"
+    }
+    content {
+      label = labels.key
+      value = labels.value
+    }
+  }
+
+  networks_advanced {
+    name = docker_network.traefik.id
+  }
+}
+
+resource "docker_network" "traefik" {
+  name     = "traefik"
+  internal = true
+}
+
+resource "docker_network" "ingress" {
+  name     = "ingress"
+  internal = false
+}
+
+# data "docker_network" "default" {
+#   name = "bridge"
+# }
+
+resource "docker_container" "traefik-forward-auth" {
+  name  = "traefik-forward-auth"
+  image = "thomseddon/traefik-forward-auth:2"
+
+  depends_on = [
+    docker_container.keycloak
+  ]
+
+  env = [
+    "SECRET=something-random",
+    "INSECURE_COOKIE=true",
+    "PROVIDERS_OIDC_ISSUER_URL=https://auth.zuercher.dev/realms/demo",
+    "PROVIDERS_OIDC_CLIENT_ID=test-ocid-client",
+    "PROVIDERS_OIDC_CLIENT_SECRET=SdhNUQwZRN3LRuLpunkyiHfwhhKsvE9D",
+    "DEFAULT_PROVIDER=oidc",
+    # "LOG_LEVEL=debug",
+  ]
+
+  networks_advanced {
+    name = docker_network.traefik.id
+  }
+  networks_advanced {
+    name = docker_network.ingress.id
+  }
+
+  dynamic "labels" {
+    for_each = {
+      "traefik.http.middlewares.traefik-forward-auth.forwardauth.address"             = "http://traefik-forward-auth:4181"
+      "traefik.http.middlewares.traefik-forward-auth.forwardauth.authResponseHeaders" = "X-Forwarded-User"
+      "traefik.http.services.traefik-forward-auth.loadbalancer.server.port"           = 4181
+    }
+    content {
+      label = labels.key
+      value = labels.value
+    }
   }
 }
 
@@ -79,18 +176,44 @@ resource "docker_container" "traefik" {
   name  = "traefik"
   image = docker_image.traefik.image_id
 
-  ports {
-    external = 80
-    internal = 80
+  dynamic "ports" {
+    for_each = [80, 443]
+    content {
+      external = ports.value
+      internal = ports.value
+    }
   }
-  ports {
-    external = 443
-    internal = 443
-  }
+
+  # ports {
+  #   internal = 80
+  #   external = 80
+  # }
+  # ports {
+  #   internal = 443
+  #   external = 443
+  # }
 
   volumes {
     host_path      = "/var/run/docker.sock"
     container_path = "/var/run/docker.sock"
+  }
+
+  # Traefik storage for verified cerificates
+  mounts {
+    target = "/acme.json"
+    source = "/etc/traefik/acme.json"
+    type   = "bind"
+  }
+  volumes {
+    host_path      = "/etc/traefik/acme"
+    container_path = "/etc/traefik/acme"
+  }
+
+  networks_advanced {
+    name = docker_network.ingress.id
+  }
+  networks_advanced {
+    name = docker_network.traefik.id
   }
 
   env = [
@@ -100,46 +223,37 @@ resource "docker_container" "traefik" {
 
   command = [
     "--providers.docker=true",
+    "--providers.docker.network=traefik",
+    # "--providers.docker.exposedByDefault=false",
     "--api=true",
+    "--api.insecure=true",
     "--entrypoints.web.address=:80",
     "--entrypoints.web.http.redirections.entryPoint.to=websecure",
     "--entrypoints.web.http.redirections.entryPoint.scheme=https",
     "--entrypoints.websecure.address=:443",
+    "--certificatesresolvers.le.acme.email=lucien@zuercher.io",
+    "--certificatesresolvers.le.acme.storage=acme.json",
     "--certificatesresolvers.le.acme.dnschallenge=true",
+    "--certificatesresolvers.le.acme.dnschallenge.resolvers[0]=1.1.1.1:53",
+    "--certificatesresolvers.le.acme.dnschallenge.resolvers[1]=1.0.0.1:53",
     "--certificatesresolvers.le.acme.dnschallenge.provider=cloudflare",
-    "--entrypoints.websecure.forwardedHeaders.trustedIPs=127.0.0.1/32,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12"
+    "--entrypoints.websecure.forwardedHeaders.trustedIPs=127.0.0.1/32,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12",
+    # TMP, use staging environment to stest
+    "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory",
+    "--log.level=DEBUG"
   ]
-}
 
- resource "docker_container" "keycloak" {
-     name = "keycloak"
-     image = docker_image.keycloak.image_id
-
-     command = ["start-dev"]
-     env = [
-        "KEYCLOAK_ADMIN=nimda",
-        "KEYCLOAK_ADMIN_PASSWORD=${random_password.keycloak.result}",
-        "KC_HOSTNAME_URL=https://keycloak.zuercher.dev/",
-        "PROXY_ADDRESS_FORWARDING=true"
-    ]
-
-    labels {
-        label = "traefik.http.routers.keycloak.rule"
-        value = "Host(`keycloak.zuercher.dev`)"
+  dynamic "labels" {
+    for_each = {
+      "traefik.http.routers.traefik.rule"                      = "Host(`traefik.zuercher.dev`)"
+      "traefik.http.routers.traefik.middlewares"               = "traefik-forward-auth"
+      "traefik.http.routers.traefik.tls"                       = true
+      "traefik.http.routers.traefik.tls.certresolver"          = "le"
+      "traefik.http.services.traefik.loadbalancer.server.port" = 8080
     }
-
-    labels {
-        label = "traefik.http.routers.keycloak.tls"
-        value = true
+    content {
+      label = labels.key
+      value = labels.value
     }
-
-    labels {
-        label = "traefik.http.routers.keycloak.tls.certresolver"
-        value = "le"
-    }
-}
-
-output "keycloak_password" {
-  value     = random_password.keycloak.result
-  sensitive = true
+  }
 }
