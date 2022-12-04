@@ -35,6 +35,12 @@ locals {
 provider "docker" {
   host     = local.docker_config.host
   ssh_opts = local.docker_config.ssh_opts
+
+  registry_auth {
+    address  = "ghcr.io"
+    username = var.GITHUB_DOCKER_REGISTRY_USER
+    password = var.GITHUB_DOCKER_REGISTRY_ACCESS_TOKEN
+  }
 }
 
 provider "cloudflare" {
@@ -52,6 +58,14 @@ resource "cloudflare_record" "traefik" {
 resource "cloudflare_record" "login" {
   zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
   name    = "login"
+  value   = local.coreserver.host
+  type    = "CNAME"
+  proxied = true
+}
+
+resource "cloudflare_record" "check" {
+  zone_id = var.CLOUDFLARE_ZUERCHER_DEV_ZONE_ID
+  name    = "check"
   value   = local.coreserver.host
   type    = "CNAME"
   proxied = true
@@ -96,8 +110,31 @@ resource "docker_container" "whoami" {
   }
 }
 
-resource "docker_container" "ifceditor" {
+resource "docker_container" "check" {
   image = "containous/whoami"
+
+  name = "check-service"
+
+  dynamic "labels" {
+    for_each = {
+      "traefik.http.routers.check.rule"                      = "Host(`check.zuercher.dev`)"
+      "traefik.http.routers.check.tls"                       = true
+      "traefik.http.routers.check.tls.certresolver"          = "le"
+      "traefik.http.services.check.loadbalancer.server.port" = 80
+    }
+    content {
+      label = labels.key
+      value = labels.value
+    }
+  }
+
+  networks_advanced {
+    name = docker_network.traefik.id
+  }
+}
+
+resource "docker_container" "ifceditor" {
+  image = "ghcr.io/bitfis/ifc-git-web-editor/ui"
 
   name = "ifceditor"
 
@@ -129,10 +166,6 @@ resource "docker_network" "ingress" {
   name     = "ingress"
   internal = false
 }
-
-# data "docker_network" "default" {
-#   name = "bridge"
-# }
 
 resource "docker_container" "traefik-forward-auth" {
   name  = "traefik-forward-auth"
@@ -172,6 +205,27 @@ resource "docker_container" "traefik-forward-auth" {
   }
 }
 
+
+resource "docker_container" "watch-tower" {
+  name  = "watch-tower"
+  image = "containrrr/watchtower:latest"
+
+  volumes {
+    host_path      = "/var/run/docker.sock"
+    container_path = "/var/run/docker.sock"
+  }
+
+  env = [
+    "REPO_USER=${var.GITHUB_DOCKER_REGISTRY_USER}",
+    "REPO_PASS=${var.GITHUB_DOCKER_REGISTRY_ACCESS_TOKEN}"
+  ]
+
+  command = [
+    "ifceditor",
+    "--interval", "30" # interval to check set to 30s
+  ]
+}
+
 resource "docker_container" "traefik" {
   name  = "traefik"
   image = docker_image.traefik.image_id
@@ -183,15 +237,6 @@ resource "docker_container" "traefik" {
       internal = ports.value
     }
   }
-
-  # ports {
-  #   internal = 80
-  #   external = 80
-  # }
-  # ports {
-  #   internal = 443
-  #   external = 443
-  # }
 
   volumes {
     host_path      = "/var/run/docker.sock"
@@ -240,7 +285,6 @@ resource "docker_container" "traefik" {
     "--entrypoints.websecure.forwardedHeaders.trustedIPs=127.0.0.1/32,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12",
     # TMP, use staging environment to stest
     "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory",
-    "--log.level=DEBUG"
   ]
 
   dynamic "labels" {
