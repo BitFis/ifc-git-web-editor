@@ -1,0 +1,31 @@
+name: Web UI Actions
+run-name: Build Web UI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 18
+        cache: 'yarn'
+        cache-dependency-path: 'web/package-lock.json'
+    - name: yarn install, build, test
+      run: |
+        cd web
+        yarn install
+        yarn build
+        yarn test
+    - name: Archive static web ui
+      uses: actions/upload-artifact@v3
+      with:
+        name: web-dist
+        path: |
+          dist
