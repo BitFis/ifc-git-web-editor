@@ -11,6 +11,8 @@ RUN cargo build --release && \
 
 FROM gcr.io/distroless/cc:latest AS final
 WORKDIR /app
-COPY --from=build /usr/src/binserve/bin /app
+COPY --from=build /usr/src/binserve/bin /bin
 
-ENTRYPOINT [ "/app/binserve" ]
+ADD 404.html index.html binserve.json /app/
+
+ENTRYPOINT [ "/bin/binserve" ]
