@@ -26,9 +26,8 @@ jobs:
     - name: Archive static web ui
       uses: actions/upload-artifact@v3
       with:
+        path: web/dist
         name: web-dist
-        path: |
-          web/dist
 
   deploy:
     runs-on: ubuntu-latest
@@ -37,8 +36,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
     - name: Download web-dist
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v2
       with:
+        name: web-dist
         path: web/dist
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
