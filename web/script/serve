@@ -1,0 +1,6 @@
+#!/bin/bash
+
+serve() {
+    docker run -p 8080:80 --rm -it webui
+}
+serve "$@"

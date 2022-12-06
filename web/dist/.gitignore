@@ -1,9 +1,4 @@
 # ignore all but static files
-*
+public/
 !.gitignore
-
-# Keep all config and static files
-!binserve.json
-!404.html
-!index.html
-!styles.css
+!public/styles.css
