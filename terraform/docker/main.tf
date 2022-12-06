@@ -221,7 +221,7 @@ resource "docker_container" "watch-tower" {
   ]
 
   command = [
-    "ifceditor",
+    "ifceditor", "--cleanup",
     "--interval", "30" # interval to check set to 30s
   ]
 }
