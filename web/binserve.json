@@ -1,25 +1,26 @@
 {
     "server": {
-        "host": "0.0.0.0:80"
+        "host": "0.0.0.0:8080"
     },
 
     "routes": {
-        "/": "./index.html"
+        "/": "./dist/index.html",
+        "/live": "./dist/live.html"
     },
 
     "static": {
-        "directory": "public",
+        "directory": "dist/public",
         "served_from": "/s",
         "error_pages": {
-            "404": "404.html"
+            "404": "dist/404.html"
         }
     },
 
     "config": {
-        "enable_hot_reload": false,
+        "enable_hot_reload": true,
         "fast_mem_cache": true,
         "enable_cache_control": true,
-        "enable_directory_listing": false,
+        "enable_directory_listing": true,
         "minify_html": false,
         "follow_symlinks": false,
         "enable_logging": false
